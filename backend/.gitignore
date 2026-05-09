@@ -2,5 +2,5 @@
 scripts
 seeds
 test-latency.js
-makeAdmin.ts
+makeAdmin.test
 node_modules
