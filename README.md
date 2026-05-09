@@ -1,0 +1,1 @@
+p2p proximity chat app, connects you with people within the radius of 1km and lets you talk to their browser directly using webrtc
