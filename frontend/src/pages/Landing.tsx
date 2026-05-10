@@ -46,8 +46,8 @@ const Landing: React.FC = () => (
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
         <p className="text-xs text-muted mb-6 mono border border-border px-3 py-1">Beta</p>
         <h1 className="text-5xl font-semibold tracking-tight mb-4">3P Chat</h1>
-        <p className="text-base text-muted max-w-xs mb-10 leading-relaxed">
-          Peer-to-peer, end-to-end encrypted chat. No servers store your messages.
+        <p className="text-base text-muted max-w-sm mb-10 leading-relaxed">
+          A secure, end-to-end encrypted chat experience. Find people nearby or talk directly to friends, and keep your history safely synced.
         </p>
         <div className="flex gap-3 mb-16">
           <Link to="/login" className="px-6 py-2.5 border border-border text-sm hover:bg-surface transition-colors">
@@ -61,11 +61,11 @@ const Landing: React.FC = () => (
         </div>
 
         {/* Features */}
-        <div className="grid grid-cols-3 gap-10 max-w-lg w-full text-left border-t border-border pt-10">
+        <div className="grid grid-cols-3 gap-10 max-w-2xl w-full text-left border-t border-border pt-10">
           {[
-            { tag: 'Encrypted', label: 'AES-256-GCM',   desc: 'Every message encrypted on your device before sending' },
-            { tag: 'Direct',    label: 'WebRTC P2P',     desc: 'No relay server when peers can connect directly' },
-            { tag: 'Private',   label: 'Zero Knowledge', desc: 'Your keys never leave your device' },
+            { tag: 'Secure', label: 'True Privacy', desc: 'Only you and your friends can read your messages. The server only stores encrypted text.' },
+            { tag: 'Local', label: 'Proximity Chat', desc: 'Enable location services to discover and chat with other users near your physical location.' },
+            { tag: 'Persistent', label: 'Synced History', desc: 'Your past conversations are securely backed up so they are available when you log back in.' },
           ].map(f => (
             <div key={f.label}>
               <p className="text-xs text-muted mb-1">{f.tag}</p>
