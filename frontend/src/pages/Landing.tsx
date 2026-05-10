@@ -15,7 +15,7 @@ const Landing: React.FC = () => (
         top:       '50%',
         left:      '50%',
         transform: 'translate(-50%, -50%)',
-        opacity:   0.09,
+        opacity:   0.3,
         pointerEvents: 'none',
         zIndex: 0,
         // Fade edges so it doesn't hard-clip
