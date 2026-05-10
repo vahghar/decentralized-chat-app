@@ -4,6 +4,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { chatSocket } from '../../services/socket';
 import { MapPin, MapPinOff, Plus } from 'lucide-react';
+import { API_URL } from '../../config';
 
 // Round lat/lng to 2 decimal places (~1km grid) — must match backend formula
 const roundCoord = (n: number) => Math.round(n * 100) / 100;
@@ -34,7 +35,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   // ── Fetch contacts on mount ──────────────────────────────────────
   useEffect(() => {
     if (!user) return;
-    axios.get('http://localhost:5000/api/users/contacts', { withCredentials: true })
+    axios.get(`${API_URL}/api/users/contacts`, { withCredentials: true })
       .then(r => { setContacts(r.data.contacts); setInvites(r.data.invites); })
       .catch(console.error);
   }, [user]);
@@ -50,7 +51,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
       coordsRef.current = null;
 
       // Tell backend we're no longer discoverable
-      axios.post('http://localhost:5000/api/users/status',
+      axios.post(`${API_URL}/api/users/status`,
         { lat: 0, lng: 0, isDiscoverable: false },
         { withCredentials: true }
       ).catch(() => {});
@@ -83,13 +84,13 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
         coordsRef.current = { lat, lng };
 
         const postStatus = () =>
-          axios.post('http://localhost:5000/api/users/status',
+          axios.post(`${API_URL}/api/users/status`,
             { lat, lng, isDiscoverable: true },
             { withCredentials: true }
           ).catch(console.error);
 
         const pollNearby = () =>
-          axios.get(`http://localhost:5000/api/users/nearby?lat=${lat}&lng=${lng}`,
+          axios.get(`${API_URL}/api/users/nearby?lat=${lat}&lng=${lng}`,
             { withCredentials: true }
           ).then(r => {
             setNearbyUsers(r.data.users ?? []);
@@ -125,7 +126,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
       if (proxRoom) {
         // Synchronous beacon so it fires even on page close
         navigator.sendBeacon(
-          'http://localhost:5000/api/users/status',
+          `${API_URL}/api/users/status`,
           JSON.stringify({ lat: 0, lng: 0, isDiscoverable: false })
         );
         chatSocket.emit('leave_room', proxRoom);
@@ -140,7 +141,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
     e.preventDefault();
     if (!newContact.trim() || !user) return;
     try {
-      await axios.post('http://localhost:5000/api/users/invite', { targetUsername: newContact }, { withCredentials: true });
+      await axios.post(`${API_URL}/api/users/invite`, { targetUsername: newContact }, { withCredentials: true });
       chatSocket.emit('send_invite', { to: newContact, from: user.username });
       setNewContact('');
       toast.success('Invite sent');
@@ -149,7 +150,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
 
   const handleAccept = async (name: string) => {
     try {
-      await axios.post('http://localhost:5000/api/users/accept', { targetUsername: name }, { withCredentials: true });
+      await axios.post(`${API_URL}/api/users/accept`, { targetUsername: name }, { withCredentials: true });
       addContact(name); removeInvite(name);
     } catch {}
   };
@@ -158,7 +159,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
     e.stopPropagation();
     if (!confirm(`Remove ${name}?`)) return;
     try {
-      await axios.post('http://localhost:5000/api/users/remove', { targetUsername: name }, { withCredentials: true });
+      await axios.post(`${API_URL}/api/users/remove`, { targetUsername: name }, { withCredentials: true });
       removeContactLocal(name);
       if (activeRoom.includes(name)) setActiveRoom('tech');
     } catch {}
@@ -169,7 +170,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
 
   const logout = async () => {
     try {
-      await axios.post('http://localhost:5000/api/auth/logout', {}, { withCredentials: true });
+      await axios.post(`${API_URL}/api/auth/logout`, {}, { withCredentials: true });
       setUser(null);
     } catch (e) { console.error(e); }
   };

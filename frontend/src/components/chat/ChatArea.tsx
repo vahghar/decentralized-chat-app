@@ -6,6 +6,7 @@ import { WebRTCManager } from '../../services/webrtc';
 import { CryptoService } from '../../services/crypto';
 import { chatSocket, signalSocket } from '../../services/socket';
 import axios from 'axios';
+import { API_URL } from '../../config';
 
 import { Menu } from 'lucide-react';
 
@@ -28,7 +29,7 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await axios.get(`http://localhost:5000/api/chat/history/${activeRoom}`, { withCredentials: true });
+        const res = await axios.get(`${API_URL}/api/chat/history/${activeRoom}`, { withCredentials: true });
         const history = await Promise.all(res.data.map(async (msg: any) => {
           const secret = sharedSecrets[activeRoom];
           let decrypted = await CryptoService.decrypt(msg.text, secret || activeRoom);
@@ -63,7 +64,7 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
         const parts = activeRoom.split('_');
         const otherUser = parts[1] === user.username ? parts[2] : parts[1];
         try {
-          const res = await axios.get(`http://localhost:5000/api/users/public-key/${otherUser}`, { withCredentials: true });
+          const res = await axios.get(`${API_URL}/api/users/public-key/${otherUser}`, { withCredentials: true });
           if (res.data.publicKey) {
             const pubKey = await CryptoService.importPublicKey(res.data.publicKey);
             const secret = await CryptoService.deriveSharedSecret(identity.privateKey, pubKey);
@@ -81,7 +82,7 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
 
     const fetchOnline = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/users/online', { withCredentials: true });
+        const res = await axios.get(`${API_URL}/api/users/online`, { withCredentials: true });
         setOnlineUsers(res.data);
       } catch (e) { console.error(e); }
     };

@@ -7,6 +7,7 @@ import Landing from './pages/Landing';
 import { useChatStore } from './store';
 import { Toaster } from 'react-hot-toast';
 import axios from 'axios';
+import { API_URL } from './config';
 
 function App() {
   const { user, setUser, theme } = useChatStore();
@@ -28,14 +29,14 @@ function App() {
       // Publish public key to server if we have a user
       if (user) {
         const pub = await CryptoService.exportPublicKey(id.publicKey);
-        await axios.post('http://localhost:5000/api/users/update-key', { publicKey: pub }, { withCredentials: true });
+        await axios.post(`${API_URL}/api/users/update-key`, { publicKey: pub }, { withCredentials: true });
       }
     };
     initE2E();
 
     const syncUser = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/auth/me', { withCredentials: true });
+        const res = await axios.get(`${API_URL}/api/auth/me`, { withCredentials: true });
         if (res.data.user) {
           setUser(res.data.user);
         }

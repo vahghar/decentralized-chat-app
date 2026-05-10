@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { useChatStore } from '../store';
 import { Link, useNavigate } from 'react-router-dom';
+import { useChatStore } from '../store';
 import toast from 'react-hot-toast';
+import { API_URL } from '../config';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -13,7 +14,7 @@ const Login = () => {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:5000/api/auth/login', { username, password }, { withCredentials: true });
+      const res = await axios.post(`${API_URL}/api/auth/login`, { username, password }, { withCredentials: true });
       setUser(res.data.user);
       navigate('/chat');
     } catch { toast.error('Incorrect username or password'); }
