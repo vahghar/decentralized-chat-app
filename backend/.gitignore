@@ -4,3 +4,4 @@ seeds
 test-latency.js
 makeAdmin.test
 node_modules
+dist

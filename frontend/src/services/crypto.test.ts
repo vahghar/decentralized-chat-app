@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { CryptoService } from './crypto';
 
 // Polyfill window.crypto for Node.js environment via vitest/jsdom
+// @ts-ignore
 import { webcrypto } from 'crypto';
 if (!window.crypto) {
   (window as any).crypto = webcrypto;
