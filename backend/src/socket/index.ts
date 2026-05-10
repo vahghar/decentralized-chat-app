@@ -31,7 +31,7 @@ export const initializeSocket = async (server: http.Server) => {
       socket.join(`user_${username}`);
       (socket as any).username = username;
       console.log(`User ${username} identified and joined personal room`);
-      
+
       // Update presence
       const { User } = await import('../models/User');
       await User.findOneAndUpdate({ username }, { lastSeen: new Date() });
@@ -78,7 +78,7 @@ export const initializeSocket = async (server: http.Server) => {
     socket.on('message_read', async (data: { messageId: string, roomId: string, username: string }) => {
       const { Message } = await import('../models/Message');
       const mongoose = (await import('mongoose')).default;
-      
+
       if (!mongoose.Types.ObjectId.isValid(data.messageId)) return;
 
       const msg = await Message.findByIdAndUpdate(
@@ -101,19 +101,19 @@ export const initializeSocket = async (server: http.Server) => {
       if (msg) {
         const reactions = msg.reactions as Map<string, string[]> || new Map();
         const users = reactions.get(data.emoji) || [];
-        
+
         if (users.includes(data.username)) {
           reactions.set(data.emoji, users.filter(u => u !== data.username));
         } else {
           reactions.set(data.emoji, [...users, data.username]);
         }
-        
+
         msg.reactions = reactions;
         await msg.save();
-        
-        chatIo.to(data.roomId).emit('reaction_update', { 
-          messageId: data.messageId, 
-          reactions: Object.fromEntries(reactions) 
+
+        chatIo.to(data.roomId).emit('reaction_update', {
+          messageId: data.messageId,
+          reactions: Object.fromEntries(reactions)
         });
       }
     });

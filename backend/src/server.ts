@@ -17,7 +17,7 @@ const server = http.createServer(app);
 
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: [process.env.CLIENT_URL || 'http://localhost:5173'],
   credentials: true
 }));
 app.use(express.json());
@@ -42,7 +42,7 @@ mongoose.connect(MONGODB_URI)
   .then(async () => {
     console.log('Connected to MongoDB');
     await initializeSocket(server);
-    
+
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
