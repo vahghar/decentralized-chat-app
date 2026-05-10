@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { API_URL } from '../config';
 
 const Register = () => {
   const [username, setUsername] = useState('');
@@ -11,7 +12,7 @@ const Register = () => {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/auth/register', { username, password });
+      await axios.post(`${API_URL}/api/auth/register`, { username, password });
       toast.success('Account created');
       navigate('/login');
     } catch { toast.error('Registration failed'); }
