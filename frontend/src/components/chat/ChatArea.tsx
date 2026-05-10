@@ -175,7 +175,7 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
       chatSocket.disconnect(); 
       signalSocket.disconnect();
     };
-  }, [activeRoom, messages.length, sharedSecrets[activeRoom]]); // re-run if secret arrives
+  }, [activeRoom, sharedSecrets[activeRoom], identity]); // re-run if secret or identity arrives
 
   const LOCKED = ['Announcements', 'Job openings'];
   const isLocked = LOCKED.includes(activeRoom) && !user?.isAdmin;
@@ -204,6 +204,11 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
         isP2P: true,
         readBy: [],
         reactions: {},
+      });
+      // Save an encrypted backup to the server for history
+      chatSocket.emit('save_p2p_message', {
+        roomId: activeRoom,
+        message: { text: enc, sender: user.username },
       });
       return;
     }

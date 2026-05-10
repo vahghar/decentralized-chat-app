@@ -62,6 +62,19 @@ export const initializeSocket = async (server: http.Server) => {
       });
     });
 
+    socket.on('save_p2p_message', async (data: { roomId: string, message: any }) => {
+      const { Message } = await import('../models/Message');
+      await Message.create({
+        roomId: data.roomId,
+        sender: data.message.sender,
+        text: data.message.text,
+        isP2P: true,
+        readBy: [data.message.sender] // Assume sender has read it
+      });
+      // Do NOT relay this message because it was sent via WebRTC P2P
+    });
+
+
     socket.on('message_read', async (data: { messageId: string, roomId: string, username: string }) => {
       const { Message } = await import('../models/Message');
       const mongoose = (await import('mongoose')).default;

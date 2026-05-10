@@ -6,8 +6,8 @@ const router = express.Router();
 router.get('/history/:roomId', async (req, res) => {
   try {
     const { roomId } = req.params;
-    // Fetch last 50 non-P2P messages for the room
-    const messages = await Message.find({ roomId, isP2P: false })
+    // Fetch last 50 messages for the room (both P2P and relayed)
+    const messages = await Message.find({ roomId })
       .sort({ createdAt: 1 })
       .limit(50);
       
