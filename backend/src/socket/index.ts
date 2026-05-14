@@ -6,7 +6,7 @@ import http from 'http';
 export const initializeSocket = async (server: http.Server) => {
   const io = new SocketIOServer(server, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
+      origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5173'],
       credentials: true
     }
   });
@@ -25,6 +25,26 @@ export const initializeSocket = async (server: http.Server) => {
     socket.on('join_room', (roomId: string) => {
       socket.join(roomId);
       console.log(`Socket ${socket.id} joined room ${roomId}`);
+    });
+
+    socket.on('delete_message', async (data: { messageId: string, roomId: string }) => {
+      try {
+        const { Message } = await import('../models/Message');
+        await Message.findByIdAndDelete(data.messageId);
+        chatIo.to(data.roomId).emit('message_deleted', data.messageId);
+      } catch (err) {
+        console.error("Failed to delete message:", err);
+      }
+    });
+
+    socket.on('clear_room', async (roomId: string) => {
+      try {
+        const { Message } = await import('../models/Message');
+        await Message.deleteMany({ roomId });
+        chatIo.to(roomId).emit('room_cleared');
+      } catch (err) {
+        console.error("Failed to clear room:", err);
+      }
     });
 
     socket.on('identify', async (username: string) => {

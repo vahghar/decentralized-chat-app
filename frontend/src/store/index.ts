@@ -26,6 +26,7 @@ interface ChatState {
   setMessages: (msgs: Message[]) => void;
   addMessage: (msg: Message) => void;
   updateMessage: (messageId: string, updates: Partial<Message>) => void;
+  removeMessage: (messageId: string) => void;
   contacts: string[];
   setContacts: (contacts: string[]) => void;
   addContact: (username: string) => void;
@@ -68,6 +69,9 @@ export const useChatStore = create<ChatState>()(
       addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
       updateMessage: (messageId, updates) => set((state) => ({
         messages: state.messages.map(m => m.id === messageId ? { ...m, ...updates } : m)
+      })),
+      removeMessage: (messageId) => set((state) => ({
+        messages: state.messages.filter(m => m.id !== messageId)
       })),
       contacts: [],
       setContacts: (contacts) => set({ contacts }),

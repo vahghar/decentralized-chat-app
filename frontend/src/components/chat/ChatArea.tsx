@@ -14,7 +14,7 @@ interface Props { onToggleSidebar: () => void; }
 
 const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
   const { 
-    activeRoom, messages, setMessages, addMessage, updateMessage,
+    activeRoom, messages, setMessages, addMessage, updateMessage, removeMessage,
     isP2PConnected, setIsP2PConnected, user, setOnlineUsers, updatePresence,
     identity, sharedSecrets, setSharedSecret
   } = useChatStore();
@@ -29,7 +29,10 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const res = await axios.get(`${API_URL}/api/chat/history/${activeRoom}`, { withCredentials: true });
+        const res = await axios.get(`${API_URL}/api/chat/history/${activeRoom}?t=${Date.now()}`, { 
+          withCredentials: true,
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
+        });
         const history = await Promise.all(res.data.map(async (msg: any) => {
           const secret = sharedSecrets[activeRoom];
           let decrypted = await CryptoService.decrypt(msg.text, secret || activeRoom);
@@ -127,6 +130,8 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
     chatSocket.on('presence_update', onPresence);
     chatSocket.on('read_receipt', onReadReceipt);
     chatSocket.on('reaction_update', onReaction);
+    chatSocket.on('message_deleted', (messageId: string) => removeMessage(messageId));
+    chatSocket.on('room_cleared', () => setMessages([]));
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
@@ -173,6 +178,8 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
       chatSocket.off('presence_update'); 
       chatSocket.off('read_receipt'); 
       chatSocket.off('reaction_update'); 
+      chatSocket.off('message_deleted');
+      chatSocket.off('room_cleared');
       chatSocket.disconnect(); 
       signalSocket.disconnect();
     };
@@ -183,6 +190,12 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
 
   const send = async (text: string) => {
     if (!user || isLocked) return;
+    
+    if (text.trim() === '/clear') {
+      chatSocket.emit('clear_room', activeRoom);
+      return;
+    }
+
     let textToSend = text;
 
     if (text.toLowerCase().includes('/meme') && activeRoom === 'Memes') {
