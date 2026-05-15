@@ -8,16 +8,20 @@ import { API_URL } from '../config';
 const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const setUser = useChatStore(s => s.setUser);
   const navigate = useNavigate();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
+    setIsLoading(true);
     try {
       const res = await axios.post(`${API_URL}/api/auth/login`, { username, password }, { withCredentials: true });
       setUser(res.data.user);
       navigate('/chat');
     } catch { toast.error('Incorrect username or password'); }
+    finally { setIsLoading(false); }
   };
 
   return (
@@ -44,9 +48,10 @@ const Login = () => {
               style={{ color: 'var(--text)' }} />
           </div>
           <button type="submit"
-            style={{ background: 'var(--text)', color: 'var(--bg)' }}
-            className="w-full py-2.5 text-sm mt-2">
-            Sign in
+            disabled={isLoading}
+            style={{ background: 'var(--text)', color: 'var(--bg)', opacity: isLoading ? 0.7 : 1 }}
+            className="w-full py-2.5 text-sm mt-2 transition-opacity">
+            {isLoading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
 

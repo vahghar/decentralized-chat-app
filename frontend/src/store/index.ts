@@ -24,6 +24,10 @@ interface ChatState {
   setActiveRoom: (room: string) => void;
   messages: Message[];
   setMessages: (msgs: Message[]) => void;
+  typingUsers: string[];
+  setTypingUsers: (users: string[]) => void;
+  addTypingUser: (username: string) => void;
+  removeTypingUser: (username: string) => void;
   addMessage: (msg: Message) => void;
   updateMessage: (messageId: string, updates: Partial<Message>) => void;
   removeMessage: (messageId: string) => void;
@@ -63,9 +67,17 @@ export const useChatStore = create<ChatState>()(
       user: null,
       setUser: (user) => set({ user }),
       activeRoom: 'general',
-      setActiveRoom: (activeRoom) => set({ activeRoom, messages: [], isP2PConnected: false }),
+      setActiveRoom: (activeRoom) => set({ activeRoom, messages: [], isP2PConnected: false, typingUsers: [] }),
       messages: [],
       setMessages: (messages) => set({ messages }),
+      typingUsers: [],
+      setTypingUsers: (typingUsers) => set({ typingUsers }),
+      addTypingUser: (username) => set((state) => ({ 
+        typingUsers: state.typingUsers.includes(username) ? state.typingUsers : [...state.typingUsers, username] 
+      })),
+      removeTypingUser: (username) => set((state) => ({ 
+        typingUsers: state.typingUsers.filter(u => u !== username) 
+      })),
       addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
       updateMessage: (messageId, updates) => set((state) => ({
         messages: state.messages.map(m => m.id === messageId ? { ...m, ...updates } : m)

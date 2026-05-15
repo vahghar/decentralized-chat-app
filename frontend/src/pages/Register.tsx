@@ -7,15 +7,19 @@ import { API_URL } from '../config';
 const Register = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
+    setIsLoading(true);
     try {
       await axios.post(`${API_URL}/api/auth/register`, { username, password });
       toast.success('Account created');
       navigate('/login');
     } catch { toast.error('Registration failed'); }
+    finally { setIsLoading(false); }
   };
 
   return (
@@ -42,9 +46,10 @@ const Register = () => {
               style={{ color: 'var(--text)' }} />
           </div>
           <button type="submit"
-            style={{ background: 'var(--text)', color: 'var(--bg)' }}
-            className="w-full py-2.5 text-sm mt-2">
-            Create account
+            disabled={isLoading}
+            style={{ background: 'var(--text)', color: 'var(--bg)', opacity: isLoading ? 0.7 : 1 }}
+            className="w-full py-2.5 text-sm mt-2 transition-opacity">
+            {isLoading ? 'Creating account...' : 'Create account'}
           </button>
         </form>
 

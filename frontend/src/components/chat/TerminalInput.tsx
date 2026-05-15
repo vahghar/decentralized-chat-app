@@ -1,18 +1,45 @@
 import React, { useState, useRef } from 'react';
-import { Send, Mic, Square} from 'lucide-react';
+import { Send, Mic, Square } from 'lucide-react';
+import { chatSocket } from '../../services/socket';
+import { useChatStore } from '../../store';
 
-interface Props { onSend: (text: string) => void; }
+interface Props { 
+  onSend: (text: string) => void; 
+  activeRoom: string; 
+}
 
-const TerminalInput: React.FC<Props> = ({ onSend }) => {
+const TerminalInput: React.FC<Props> = ({ onSend, activeRoom }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
-  
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { user } = useChatStore();
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value);
+    
+    if (user) {
+      chatSocket.emit('typing_start', { roomId: activeRoom, username: user.username });
+      
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      
+      typingTimeoutRef.current = setTimeout(() => {
+        chatSocket.emit('typing_stop', { roomId: activeRoom, username: user.username });
+      }, 1500);
+    }
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (text.trim()) { onSend(text); setText(''); }
+    if (text.trim()) { 
+      onSend(text); 
+      setText(''); 
+      if (user) {
+        chatSocket.emit('typing_stop', { roomId: activeRoom, username: user.username });
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      }
+    }
   };
 
   const startRecording = async () => {
@@ -55,7 +82,7 @@ const TerminalInput: React.FC<Props> = ({ onSend }) => {
       <input
         type="text"
         value={text}
-        onChange={e => setText(e.target.value)}
+        onChange={handleTextChange}
         placeholder="Message..."
         autoFocus
         className="flex-1 bg-transparent text-sm text-fg outline-none border-b border-border pb-1.5 focus:border-fg transition-colors"

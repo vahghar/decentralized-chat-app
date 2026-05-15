@@ -62,6 +62,14 @@ export const initializeSocket = async (server: http.Server) => {
       socket.to(`user_${data.to}`).emit('receive_invite', { from: data.from });
     });
 
+    socket.on('typing_start', (data: { roomId: string, username: string }) => {
+      socket.to(data.roomId).emit('typing_start', { username: data.username });
+    });
+
+    socket.on('typing_stop', (data: { roomId: string, username: string }) => {
+      socket.to(data.roomId).emit('typing_stop', { username: data.username });
+    });
+
     socket.on('send_message', async (data: { roomId: string, message: any }) => {
       // Save to MongoDB (only non-P2P messages)
       const { Message } = await import('../models/Message');

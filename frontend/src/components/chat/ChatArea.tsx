@@ -16,7 +16,7 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
   const { 
     activeRoom, messages, setMessages, addMessage, updateMessage, removeMessage,
     isP2PConnected, setIsP2PConnected, user, setOnlineUsers, updatePresence,
-    identity, sharedSecrets, setSharedSecret
+    identity, sharedSecrets, setSharedSecret, typingUsers, addTypingUser, removeTypingUser
   } = useChatStore();
 
   // On mobile, if the room changes, it's likely we just clicked something in the sidebar
@@ -132,6 +132,8 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
     chatSocket.on('reaction_update', onReaction);
     chatSocket.on('message_deleted', (messageId: string) => removeMessage(messageId));
     chatSocket.on('room_cleared', () => setMessages([]));
+    chatSocket.on('typing_start', (data: { username: string }) => addTypingUser(data.username));
+    chatSocket.on('typing_stop', (data: { username: string }) => removeTypingUser(data.username));
 
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
@@ -180,6 +182,8 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
       chatSocket.off('reaction_update'); 
       chatSocket.off('message_deleted');
       chatSocket.off('room_cleared');
+      chatSocket.off('typing_start');
+      chatSocket.off('typing_stop');
       chatSocket.disconnect(); 
       signalSocket.disconnect();
     };
@@ -286,6 +290,16 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
             </div>
           ))
         )}
+        {typingUsers.length > 0 && (
+          <div className="flex items-center gap-3 mt-2 mb-1 px-1">
+            <span className="text-xs font-medium text-muted">{typingUsers.join(', ')}</span>
+            <div className="flex gap-1">
+              <div className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-1.5 h-1.5 bg-muted rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            </div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
@@ -293,7 +307,7 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
       <div className="px-6 py-4 border-t border-border bg-surface shrink-0">
         {isLocked
           ? <p className="text-xs text-muted text-center">You don't have permission to post here</p>
-          : <TerminalInput onSend={send} />
+          : <TerminalInput onSend={send} activeRoom={activeRoom} />
         }
       </div>
     </div>
