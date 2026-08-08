@@ -13,8 +13,18 @@ export const initializeSocket = async (server: http.Server) => {
     }
   });
 
-  const pubClient = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+  const redisOptions: any = { url: redisUrl };
+  
+  if (redisUrl.startsWith('rediss://')) {
+    redisOptions.socket = { tls: true, rejectUnauthorized: false };
+  }
+
+  const pubClient = createClient(redisOptions);
   const subClient = pubClient.duplicate();
+
+  pubClient.on('error', (err) => console.error('Redis Pub Client Error:', err));
+  subClient.on('error', (err) => console.error('Redis Sub Client Error:', err));
 
   await Promise.all([pubClient.connect(), subClient.connect()]);
   io.adapter(createAdapter(pubClient, subClient));
