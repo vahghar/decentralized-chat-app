@@ -44,10 +44,9 @@ const Landing: React.FC = () => (
 
       {/* Hero */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
-        <p className="text-xs text-muted mb-6 mono border border-border px-3 py-1">Beta</p>
-        <h1 className="text-5xl font-semibold tracking-tight mb-4">3P Chat</h1>
+        <h1 className="text-5xl font-semibold tracking-tight mb-4">3P Network</h1>
         <p className="text-base text-muted max-w-sm mb-10 leading-relaxed">
-          A secure, end-to-end encrypted chat experience. Find people nearby or talk directly to friends, and keep your history safely synced.
+          A secure, end-to-end encrypted P2P network. Chat with people nearby when you're bored, and beam limitless files directly to their devices.
         </p>
         <div className="flex gap-3 mb-16">
           <Link to="/login" className="px-6 py-2.5 border border-border text-sm hover:bg-surface transition-colors">
@@ -63,9 +62,9 @@ const Landing: React.FC = () => (
         {/* Features */}
         <div className="grid grid-cols-3 gap-10 max-w-2xl w-full text-left border-t border-border pt-10">
           {[
-            { tag: 'Secure', label: 'True Privacy', desc: 'Only you and your friends can read your messages. The server only stores encrypted text.' },
-            { tag: 'Local', label: 'Proximity Chat', desc: 'Enable location services to discover and chat with other users near your physical location.' },
-            { tag: 'Persistent', label: 'Synced History', desc: 'Your past conversations are securely backed up so they are available when you log back in.' },
+            { tag: 'Social', label: 'Proximity Chat', desc: 'Enable location services to discover and chat with other users near your physical location.' },
+            { tag: 'Utility', label: 'Limitless Beaming', desc: 'Transfer 50GB files instantly. WebRTC data channels let you beam files directly device-to-device.' },
+            { tag: 'Secure', label: 'True Privacy', desc: 'End-to-end encrypted messaging and direct file transfers. The server never stores your data.' },
           ].map(f => (
             <div key={f.label}>
               <p className="text-xs text-muted mb-1">{f.tag}</p>

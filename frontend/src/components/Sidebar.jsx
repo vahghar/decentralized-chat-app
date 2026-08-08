@@ -34,6 +34,30 @@ const Sidebar = () => {
     await removeFriend(friendId);
   }
 
+  const handleCreateGroup = async () => {
+    const groupName = prompt("Enter a name for your new group:");
+    if (!groupName) return;
+    try {
+      const response = await fetch(`${API_URL}/api/users/create-group`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ name: groupName })
+      });
+      const data = await response.json();
+      
+      if (response.ok) {
+        alert(`Group created! Share this link: localhost:5173${data.inviteLink}`);
+      } else {
+        alert(data.error);
+      }
+    } catch (error) {
+      console.error("Failed to connect to backend", error);
+    }
+  };
+  
   if (isUserLoading) return <SidebarSkeleton />;
 
   return (

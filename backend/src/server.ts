@@ -15,6 +15,7 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
+// adds extra security headers
 app.use(helmet());
 app.use(cors({
   origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5173'],

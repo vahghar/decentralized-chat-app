@@ -1,19 +1,21 @@
 import React, { useState, useRef } from 'react';
-import { Send, Mic, Square } from 'lucide-react';
+import { Send, Mic, Square, Paperclip } from 'lucide-react';
 import { chatSocket } from '../../services/socket';
 import { useChatStore } from '../../store';
 
 interface Props { 
   onSend: (text: string) => void; 
+  onSendFile?: (file: File) => void;
   activeRoom: string; 
 }
 
-const TerminalInput: React.FC<Props> = ({ onSend, activeRoom }) => {
+const TerminalInput: React.FC<Props> = ({ onSend, onSendFile, activeRoom }) => {
   const [text, setText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { user } = useChatStore();
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,6 +90,25 @@ const TerminalInput: React.FC<Props> = ({ onSend, activeRoom }) => {
         className="flex-1 bg-transparent text-sm text-fg outline-none border-b border-border pb-1.5 focus:border-fg transition-colors"
         style={{ color: 'var(--text)' }}
       />
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        hidden 
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0 && onSendFile) {
+            onSendFile(e.target.files[0]);
+            e.target.value = ''; // Reset input
+          }
+        }} 
+      />
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        className="transition-colors p-1.5 rounded-full text-fg hover:bg-surface"
+        title="Attach file"
+      >
+        <Paperclip size={15} />
+      </button>
       <button
         type="button"
         onClick={isRecording ? stopRecording: startRecording}

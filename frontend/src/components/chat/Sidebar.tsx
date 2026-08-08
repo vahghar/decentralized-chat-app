@@ -2,8 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { useChatStore } from '../../store';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { chatSocket } from '../../services/socket';
-import { MapPin, MapPinOff, Plus } from 'lucide-react';
+import { chatSocket, signalSocket } from '../../services/socket';
+import { MapPin, MapPinOff, Plus, Users, LogOut, Trash2 } from 'lucide-react';
 import { API_URL } from '../../config';
 
 // Round lat/lng to 2 decimal places (~1km grid) — must match backend formula
@@ -14,6 +14,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
     user, setUser, activeRoom, setActiveRoom,
     contacts, setContacts, addContact, removeContactLocal,
     invites, setInvites, removeInvite,
+    groups, setGroups, addGroup, removeGroup,
     isDiscoverable, toggleDiscoverable,
     nearbyUsers, setNearbyUsers,
     proximityRoomId, setProximityRoomId,
@@ -26,6 +27,8 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   };
 
   const [newContact, setNewContact] = React.useState('');
+  const [showGroupModal, setShowGroupModal] = React.useState(false);
+  const [newGroupName, setNewGroupName] = React.useState('');
 
   // Hold current coords for interval use
   const coordsRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -36,7 +39,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   useEffect(() => {
     if (!user) return;
     axios.get(`${API_URL}/api/users/contacts`, { withCredentials: true })
-      .then(r => { setContacts(r.data.contacts); setInvites(r.data.invites); })
+      .then(r => { setContacts(r.data.contacts); setInvites(r.data.invites); setGroups(r.data.groups || []); })
       .catch(console.error);
   }, [user]);
 
@@ -45,32 +48,27 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
     if (!isDiscoverable) {
       // Stop everything
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-      if (pollRef.current) clearInterval(pollRef.current);
       heartbeatRef.current = null;
-      pollRef.current = null;
       coordsRef.current = null;
 
-      // Tell backend we're no longer discoverable
-      axios.post(`${API_URL}/api/users/status`,
-        { lat: 0, lng: 0, isDiscoverable: false },
-        { withCredentials: true }
-      ).catch(() => {});
-
-      // Leave the proximity socket room and redirect if currently in it
+      // Tell socket we're no longer discoverable
+      // (The backend disconnect handles zRem normally, but we can just disconnect signal temporarily or ignore)
+      
       const { activeRoom: currentRoom, proximityRoomId: currentProxRoom } = useChatStore.getState();
       if (currentProxRoom) {
         chatSocket.emit('leave_room', currentProxRoom);
       }
       if (currentRoom?.startsWith('proximity_')) {
-        setActiveRoom('tech');
+        setActiveRoom('General');
       }
 
       setNearbyUsers([]);
       setProximityRoomId(null);
+      signalSocket.off('peers_nearby');
+      signalSocket.off('peer_joined');
       return;
     }
 
-    // Request location
     if (!navigator.geolocation) {
       toast.error('Geolocation not supported by your browser');
       toggleDiscoverable(); // flip back
@@ -83,27 +81,31 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
         const lng = roundCoord(pos.coords.longitude);
         coordsRef.current = { lat, lng };
 
-        const postStatus = () =>
-          axios.post(`${API_URL}/api/users/status`,
-            { lat, lng, isDiscoverable: true },
-            { withCredentials: true }
-          ).catch(console.error);
+        if (!signalSocket.connected) signalSocket.connect();
 
-        const pollNearby = () =>
-          axios.get(`${API_URL}/api/users/nearby?lat=${lat}&lng=${lng}`,
-            { withCredentials: true }
-          ).then(r => {
-            setNearbyUsers(r.data.users ?? []);
-            setProximityRoomId(r.data.roomId ?? null);
-          }).catch(console.error);
+        const joinHub = () => {
+          signalSocket.emit('join_local_hub', { lat, lon: lng, radius: 1000 });
+        };
+        joinHub();
 
-        // Initial calls
-        postStatus();
-        pollNearby();
+        // Listen for peers
+        signalSocket.on('peers_nearby', (peers: string[]) => {
+           // Create a deterministic room ID based on our location grid
+           const roomId = `proximity_${lat.toString().replace('.','_')}_${lng.toString().replace('.','_')}`;
+           setNearbyUsers(peers);
+           setProximityRoomId(roomId);
+        });
+        
+        signalSocket.on('peer_joined', (data: { peerId: string }) => {
+           setNearbyUsers(prev => Array.from(new Set([...prev, data.peerId])));
+        });
 
-        // Start intervals
-        heartbeatRef.current = setInterval(postStatus, 60_000);
-        pollRef.current = setInterval(pollNearby, 30_000);
+        signalSocket.on('peer_left', (data: { peerId: string }) => {
+           setNearbyUsers(prev => prev.filter(p => p !== data.peerId));
+        });
+
+        // Heartbeat to keep GEO index fresh
+        heartbeatRef.current = setInterval(joinHub, 60_000);
       },
       (err) => {
         console.error(err);
@@ -115,7 +117,8 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
     // Cleanup on unmount or toggle-off
     return () => {
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-      if (pollRef.current) clearInterval(pollRef.current);
+      signalSocket.off('peers_nearby');
+      signalSocket.off('peer_joined');
     };
   }, [isDiscoverable]);
 
@@ -146,6 +149,50 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
       setNewContact('');
       toast.success('Invite sent');
     } catch { toast.error('Failed to send invite'); }
+  };
+
+  const handleCreateGroup = () => {
+    setShowGroupModal(true);
+    setNewGroupName('');
+  };
+
+  const submitCreateGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGroupName.trim()) return;
+    try {
+      const response = await axios.post(`${API_URL}/api/users/create-group`, { name: newGroupName }, { withCredentials: true });
+      const inviteUrl = `localhost:5173${response.data.inviteLink}`;
+      navigator.clipboard.writeText(inviteUrl).catch(() => {});
+      toast.success(`Group created & link copied!`);
+      addGroup({ id: response.data.group._id || response.data.group.id, name: response.data.group.name });
+      setShowGroupModal(false);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || "Failed to create group");
+    }
+  };
+
+  const handleLeaveGroup = async (groupId: string) => {
+    if (!confirm("Are you sure you want to leave this group?")) return;
+    try {
+      await axios.post(`${API_URL}/api/users/leave-group`, { groupId }, { withCredentials: true });
+      removeGroup(groupId);
+      if (activeRoom === groupId) setActiveRoom('General');
+      toast.success("Left group");
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to leave group");
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+    if (!confirm("Are you sure you want to delete this group? This cannot be undone.")) return;
+    try {
+      await axios.delete(`${API_URL}/api/users/delete-group/${groupId}`, { withCredentials: true });
+      removeGroup(groupId);
+      if (activeRoom === groupId) setActiveRoom('General');
+      toast.success("Group deleted");
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to delete group");
+    }
   };
 
   const handleAccept = async (name: string) => {
@@ -213,6 +260,31 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
               {r}
             </button>
           ))}
+          {groups.length > 0 && (
+             <div className="mt-2 border-t border-border pt-2">
+                <p className="text-xs text-muted mb-2">Your Groups</p>
+                {groups.map(g => (
+                  <div key={g.id} className={`flex items-center w-full px-2 py-1.5 text-sm rounded transition-colors mb-0.5 group/groupItem ${
+                      activeRoom === g.id ? 'bg-fg text-bg' : 'text-fg hover:bg-border'
+                    }`}>
+                    <button onClick={() => selectRoom(g.id)} className="flex-1 text-left truncate">
+                      {g.name}
+                    </button>
+                    <div className="opacity-0 group-hover/groupItem:opacity-100 flex items-center shrink-0">
+                      {g.creator === user?.username ? (
+                         <button onClick={() => handleDeleteGroup(g.id)} title="Delete group">
+                           <Trash2 size={13} className="text-red-500 hover:text-red-400" />
+                         </button>
+                      ) : (
+                         <button onClick={() => handleLeaveGroup(g.id)} title="Leave group">
+                           <LogOut size={13} className="text-red-500 hover:text-red-400" />
+                         </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+             </div>
+          )}
         </section>
 
         {/* Peers */}
@@ -268,7 +340,7 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
                 activeRoom === proximityRoomId ? 'bg-fg text-bg' : 'text-fg hover:bg-border'
               }`}
             >
-              <span>Join nearby room</span>
+              <span>Join Local Hub</span>
               <span className="text-xs text-muted ml-2">({nearbyUsers.length})</span>
             </button>
           )}
@@ -277,22 +349,66 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-border shrink-0 space-y-3">
-        <form onSubmit={handleInvite} className="flex items-center gap-2 border-b border-border pb-1 focus-within:border-fg transition-colors">
-          <button type="submit" title="Send invite" className="text-muted hover:text-fg transition-colors shrink-0"><Plus size={13} /></button>
-          <input
-            type="text"
-            placeholder="Invite someone..."
-            value={newContact}
-            onChange={e => setNewContact(e.target.value)}
-            style={{ color: 'var(--text)' }}
-            className="flex-1 bg-transparent text-sm outline-none"
-          />
-        </form>
+        <div className="flex flex-col gap-3">
+          <form onSubmit={handleInvite} className="flex items-center gap-2 border-b border-border pb-1 focus-within:border-fg transition-colors">
+            <button type="submit" title="Send invite" className="text-muted hover:text-fg transition-colors shrink-0"><Plus size={13} /></button>
+            <input
+              type="text"
+              placeholder="Invite someone..."
+              value={newContact}
+              onChange={e => setNewContact(e.target.value)}
+              style={{ color: 'var(--text)' }}
+              className="flex-1 bg-transparent text-sm outline-none"
+            />
+          </form>
+          <button 
+            onClick={handleCreateGroup}
+            className="w-full text-center px-2 py-1.5 text-sm rounded transition-colors flex items-center justify-center gap-2 text-fg hover:bg-border border border-border"
+          >
+            <Users size={14} />
+            <span>Create Group</span>
+          </button>
+        </div>
         <div className="flex justify-between items-center">
           <span className="text-xs text-muted truncate max-w-[110px]">{user?.username}</span>
           <button onClick={logout} className="text-xs text-muted hover:text-fg transition-colors">Logout</button>
         </div>
       </div>
+
+      {showGroupModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-surface border border-border w-full max-w-sm p-6 shadow-2xl">
+            <h3 className="text-lg font-medium mb-4">Create Group</h3>
+            <form onSubmit={submitCreateGroup}>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Group name"
+                value={newGroupName}
+                onChange={e => setNewGroupName(e.target.value)}
+                className="w-full bg-bg border border-border px-3 py-2 text-sm outline-none focus:border-fg transition-colors mb-6"
+                style={{ color: 'var(--text)' }}
+              />
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowGroupModal(false)}
+                  className="px-4 py-2 text-sm text-muted hover:text-fg transition-colors border border-transparent"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm transition-opacity"
+                  style={{ background: 'var(--text)', color: 'var(--bg)' }}
+                >
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

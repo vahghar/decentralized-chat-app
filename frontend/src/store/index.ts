@@ -39,6 +39,10 @@ interface ChatState {
   setInvites: (invites: string[]) => void;
   addInvite: (username: string) => void;
   removeInvite: (username: string) => void;
+  groups: { id: string; name: string; creator?: string }[];
+  setGroups: (groups: { id: string; name: string; creator?: string }[]) => void;
+  addGroup: (group: { id: string; name: string; creator?: string }) => void;
+  removeGroup: (groupId: string) => void;
   isP2PConnected: boolean;
   setIsP2PConnected: (status: boolean) => void;
   theme: 'dark' | 'light';
@@ -100,6 +104,14 @@ export const useChatStore = create<ChatState>()(
       })),
       removeInvite: (username) => set((state) => ({ 
         invites: state.invites.filter(i => i !== username) 
+      })),
+      groups: [],
+      setGroups: (groups) => set({ groups }),
+      addGroup: (group) => set((state) => ({ 
+        groups: state.groups.some(g => g.id === group.id) ? state.groups : [...state.groups, group] 
+      })),
+      removeGroup: (groupId) => set((state) => ({
+        groups: state.groups.filter(g => g.id !== groupId)
       })),
       isP2PConnected: false,
       setIsP2PConnected: (isP2PConnected) => set({ isP2PConnected }),

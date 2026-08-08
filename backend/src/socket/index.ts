@@ -1,9 +1,11 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
+import {Group} from '../models/Group';
 import http from 'http';
 
 export const initializeSocket = async (server: http.Server) => {
+  // using the base http server, we upgrade it here by attaching socket server to it
   const io = new SocketIOServer(server, {
     cors: {
       origin: [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5173'],
@@ -16,6 +18,11 @@ export const initializeSocket = async (server: http.Server) => {
 
   await Promise.all([pubClient.connect(), subClient.connect()]);
   io.adapter(createAdapter(pubClient, subClient));
+
+  // Clear ghost sockets from previous runs
+  try {
+    await pubClient.del('local_hub');
+  } catch (e) {}
 
   // Chat Namespace for presence and fallback messaging
   const chatIo = io.of('/chat');
@@ -36,6 +43,18 @@ export const initializeSocket = async (server: http.Server) => {
         console.error("Failed to delete message:", err);
       }
     });
+
+    socket.on('create_group', async (data: { groupName: string }) => {
+      try {
+        const group = await Group.create({
+          name: data.groupName,
+        });
+        chatIo.emit('group_created', group);
+      } catch (err) {
+        socket.emit('error','Could not create the group')
+        console.error("Failed to create group:", err);
+      }
+    })
 
     socket.on('clear_room', async (roomId: string) => {
       try {
@@ -73,12 +92,19 @@ export const initializeSocket = async (server: http.Server) => {
     socket.on('send_message', async (data: { roomId: string, message: any }) => {
       // Save to MongoDB (only non-P2P messages)
       const { Message } = await import('../models/Message');
+      
+      let expiresAt = undefined;
+      if (data.roomId.startsWith('prox_')) {
+        expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      }
+
       const msg = await Message.create({
         roomId: data.roomId,
         sender: data.message.sender,
         text: data.message.text,
         isP2P: false,
-        readBy: [data.message.sender]
+        readBy: [data.message.sender],
+        expiresAt
       });
 
       // Relay message via server
@@ -162,24 +188,104 @@ export const initializeSocket = async (server: http.Server) => {
   signalIo.on('connection', (socket) => {
     console.log(`User connected to signal: ${socket.id}`);
 
-    socket.on('join_room', (roomId: string) => {
-      socket.join(roomId);
-      const clients = signalIo.adapter.rooms.get(roomId);
-      if (clients && clients.size > 1) {
-        socket.emit('ready_for_webrtc'); // tell second user to initiate offer
+    socket.on('join_community', (communityId: string) => {
+      socket.join(communityId);
+      console.log(`Socket ${socket.id} joined community ${communityId}`);
+      // Tell everyone else in the community that a new peer joined
+      socket.to(communityId).emit('peer_joined', { peerId: socket.id });
+    });
+
+    // --- LOCAL HUB GEO-TRACKING ---
+    socket.on('join_local_hub', async (data: { lat: number, lon: number, radius?: number }) => {
+      const radius = data.radius || 1000; // default 1000 meters
+      try {
+        // Store on socket for disconnect
+        (socket as any).geoLoc = { lat: data.lat, lon: data.lon, radius };
+
+        // Add to Redis GEO index
+        await pubClient.geoAdd('local_hub', {
+          longitude: data.lon,
+          latitude: data.lat,
+          member: socket.id
+        });
+        
+        // Find peers in radius
+        const peers = await pubClient.geoRadius('local_hub', {
+          longitude: data.lon,
+          latitude: data.lat,
+        }, radius, 'm');
+
+        // Filter out self
+        const nearbyPeers = peers.filter((p: string) => p !== socket.id);
+        socket.emit('peers_nearby', nearbyPeers);
+        
+        // Notify nearby peers that we joined
+        nearbyPeers.forEach((peerId: string) => {
+          socket.to(peerId).emit('peer_joined', { peerId: socket.id });
+        });
+      } catch (err) {
+        console.error("Geo Redis Error:", err);
       }
     });
 
-    socket.on('webrtc_offer', (data: { offer: any, roomId: string }) => {
-      socket.to(data.roomId).emit('webrtc_offer', data.offer);
+    // Targeted WebRTC Signaling
+    socket.on('webrtc_offer', (data: { offer: any, targetPeerId?: string, roomId?: string }) => {
+      if (data.roomId) {
+        socket.to(data.roomId).emit('webrtc_offer', data.offer);
+      } else if (data.targetPeerId) {
+        socket.to(data.targetPeerId).emit('webrtc_offer', { offer: data.offer, fromPeerId: socket.id });
+      }
     });
 
-    socket.on('webrtc_answer', (data: { answer: any, roomId: string }) => {
-      socket.to(data.roomId).emit('webrtc_answer', data.answer);
+    socket.on('webrtc_answer', (data: { answer: any, targetPeerId?: string, roomId?: string }) => {
+      if (data.roomId) {
+        socket.to(data.roomId).emit('webrtc_answer', data.answer);
+      } else if (data.targetPeerId) {
+        socket.to(data.targetPeerId).emit('webrtc_answer', { answer: data.answer, fromPeerId: socket.id });
+      }
     });
 
-    socket.on('webrtc_ice_candidate', (data: { candidate: any, roomId: string }) => {
-      socket.to(data.roomId).emit('webrtc_ice_candidate', data.candidate);
+    socket.on('webrtc_ice_candidate', (data: { candidate: any, targetPeerId?: string, roomId?: string }) => {
+      if (data.roomId) {
+        socket.to(data.roomId).emit('webrtc_ice_candidate', data.candidate);
+      } else if (data.targetPeerId) {
+        socket.to(data.targetPeerId).emit('webrtc_ice_candidate', { candidate: data.candidate, fromPeerId: socket.id });
+      }
+    });
+
+    socket.on('join_room', (roomId: string) => {
+      socket.join(roomId);
+      console.log(`Socket ${socket.id} joined signal room ${roomId}`);
+      // Notify others in the room to initiate connection
+      socket.to(roomId).emit('ready_for_webrtc');
+    });
+
+    socket.on('disconnecting', async () => {
+      try {
+        // Remove from GEO index
+        await pubClient.zRem('local_hub', socket.id);
+        
+        const loc = (socket as any).geoLoc;
+        if (loc) {
+          const peers = await pubClient.geoRadius('local_hub', {
+            longitude: loc.lon,
+            latitude: loc.lat,
+          }, loc.radius, 'm');
+          
+          peers.forEach((peerId: string) => {
+            if (peerId !== socket.id) {
+              socket.to(peerId).emit('peer_left', { peerId: socket.id });
+            }
+          });
+        }
+      } catch (e) {}
+
+      // Notify rooms that this peer is leaving
+      for (const room of socket.rooms) {
+        if (room !== socket.id) {
+          socket.to(room).emit('peer_left', { peerId: socket.id });
+        }
+      }
     });
 
     socket.on('disconnect', () => {

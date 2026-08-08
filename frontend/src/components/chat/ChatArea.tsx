@@ -23,6 +23,7 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
   // The Sidebar itself will trigger onClose, but we also ensure ChatArea is clean.
   const [webrtc, setWebrtc] = useState<WebRTCManager | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
@@ -147,8 +148,6 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
       });
     }, { threshold: 0.5 });
 
-    // We'll apply this observer to each message in the render loop or via a ref-based system.
-    // For simplicity, we can use a query selector inside an effect.
     const observeMessages = () => {
       document.querySelectorAll('.msg-bubble').forEach(el => observer.observe(el));
     };
@@ -157,6 +156,22 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
     const manager = new WebRTCManager(
       activeRoom,
       async (enc) => {
+        try {
+          const parsed = JSON.parse(enc);
+          if (parsed.type === 'sys' || parsed.type === 'file_received') {
+            addMessage({ 
+              id: Math.random().toString(), 
+              text: enc, 
+              sender: 'System', 
+              timestamp: new Date(), 
+              isP2P: true,
+              readBy: [],
+              reactions: {},
+            });
+            return;
+          }
+        } catch (e) {}
+
         const dec = await CryptoService.decrypt(enc, sharedSecrets[activeRoom] || activeRoom);
         const p = JSON.parse(dec);
         addMessage({ 
@@ -187,7 +202,7 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
       chatSocket.disconnect(); 
       signalSocket.disconnect();
     };
-  }, [activeRoom, sharedSecrets[activeRoom], identity]); // re-run if secret or identity arrives
+  }, [activeRoom, sharedSecrets[activeRoom], identity]);
 
   const LOCKED = ['Announcements', 'Job openings'];
   const isLocked = LOCKED.includes(activeRoom) && !user?.isAdmin;
@@ -223,7 +238,6 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
         readBy: [],
         reactions: {},
       });
-      // Save an encrypted backup to the server for history
       chatSocket.emit('save_p2p_message', {
         roomId: activeRoom,
         message: { text: enc, sender: user.username },
@@ -235,7 +249,6 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
       roomId: activeRoom,
       message: { text: enc, sender: user.username },
     });
-    // Optimistic UI — server will reply with actual ID but we add it locally first
     addMessage({ 
       id: 'temp-' + Math.random(), 
       text: textToSend, 
@@ -256,10 +269,66 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
     return activeRoom;
   };
 
-  return (
-    <div className="flex-1 flex flex-col h-full bg-bg" style={{ fontSize: 14 }}>
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+  
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
 
-      {/* Header */}
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    if (!isP2PConnected || !webrtc) {
+      addMessage({
+        id: Math.random().toString(),
+        text: 'Error: Cannot send files unless P2P is connected.',
+        sender: 'System',
+        timestamp: new Date(),
+        isP2P: false,
+        readBy: [],
+        reactions: {}
+      });
+      return;
+    }
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleSendFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleSendFile = async (file: File) => {
+    if (!isP2PConnected || !webrtc) {
+      addMessage({
+        id: Math.random().toString(),
+        text: 'Error: Cannot send files unless P2P is connected.',
+        sender: 'System',
+        timestamp: new Date(),
+        isP2P: false,
+        readBy: [],
+        reactions: {}
+      });
+      return;
+    }
+    const success = await webrtc.sendFile(file, user?.username || 'Unknown');
+    if (success) {
+      // Sender receives confirmation via WebRTC onData handler
+    }
+  };
+
+  return (
+    <div 
+      className={`flex-1 flex flex-col h-full bg-bg transition-colors ${isDragging ? 'ring-2 ring-inset ring-green-500 bg-surface/30' : ''}`} 
+      style={{ fontSize: 14 }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+
       <div className="h-12 flex items-center justify-between px-4 md:px-6 border-b border-border bg-surface shrink-0">
         <div className="flex items-center gap-3 overflow-hidden">
           <button 
@@ -272,12 +341,10 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
           {isLocked && <span className="text-xs text-muted border border-border px-1.5 py-0.5 rounded">Read only</span>}
         </div>
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isP2PConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-dim'}`} />
           <span className="text-[10px] mono text-muted uppercase tracking-widest">{isP2PConnected ? 'P2P' : 'Relay'}</span>
         </div>
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
         {messages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
@@ -307,7 +374,7 @@ const ChatArea: React.FC<Props> = ({ onToggleSidebar }) => {
       <div className="px-6 py-4 border-t border-border bg-surface shrink-0">
         {isLocked
           ? <p className="text-xs text-muted text-center">You don't have permission to post here</p>
-          : <TerminalInput onSend={send} activeRoom={activeRoom} />
+          : <TerminalInput onSend={send} onSendFile={handleSendFile} activeRoom={activeRoom} />
         }
       </div>
     </div>

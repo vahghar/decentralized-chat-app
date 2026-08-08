@@ -4,6 +4,7 @@ import AppLayout from './components/layout/AppLayout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Landing from './pages/Landing';
+import JoinGroup from './pages/JoinGroup';
 import { useChatStore } from './store';
 import { Toaster } from 'react-hot-toast';
 import axios from 'axios';
@@ -63,6 +64,7 @@ function App() {
         <Route path="/login" element={!user ? <Login /> : <Navigate to="/chat" />} />
         <Route path="/register" element={!user ? <Register /> : <Navigate to="/chat" />} />
         <Route path="/chat" element={user ? <AppLayout /> : <Navigate to="/" />} />
+        <Route path="/group/:id" element={user ? <JoinGroup /> : <Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
   );

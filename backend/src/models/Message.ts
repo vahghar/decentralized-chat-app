@@ -7,8 +7,11 @@ const messageSchema = new mongoose.Schema({
   isP2P:     { type: Boolean, default: false },
   // Read receipts — list of usernames who have seen this message
   readBy:    [{ type: String }],
-  // Reactions — emoji → [username, ...]  e.g. { '👍': ['alice', 'bob'] }
   reactions: { type: Map, of: [String], default: {} },
+  // Ephemeral messages
+  expiresAt: { type: Date }
 }, { timestamps: true });
+
+messageSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export const Message = mongoose.model('Message', messageSchema);

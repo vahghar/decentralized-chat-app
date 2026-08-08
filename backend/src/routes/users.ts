@@ -1,6 +1,7 @@
 import express from 'express';
 import { User } from '../models/User';
 import jwt from 'jsonwebtoken';
+import { Group } from '../models/Group';
 
 const router = express.Router();
 
@@ -22,9 +23,12 @@ router.get('/contacts', requireAuth, async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
     
+    const userGroups = await Group.find({ members: user.username });
+    
     res.json({ 
       contacts: user.contacts || [],
-      invites: user.invites || []
+      invites: user.invites || [],
+      groups: userGroups.map(g => ({ id: g._id, name: g.name, creator: g.creator }))
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch data' });
@@ -89,6 +93,92 @@ router.post('/invite', requireAuth, async (req, res) => {
     res.json({ message: 'Invite sent' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to send invite' });
+  }
+});
+
+router.post('/create-group', requireAuth, async (req, res) => {
+  try {
+    const { name } = req.body;
+    const creatorUsername = (req as any).user.username;
+
+    if (!name) return res.status(400).json({ error: 'Group name required' });
+
+    const newGroup = await Group.create({
+      name: name,
+      creator: creatorUsername,
+      members: [creatorUsername]
+    });
+    
+    const inviteToken = jwt.sign({ groupId: newGroup._id }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+    
+    res.json({ message: 'Group created', group: { id: newGroup._id, name: newGroup.name, creator: newGroup.creator }, inviteLink: `/group/${inviteToken}` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create group' });
+  }
+});
+
+router.post('/join-group', requireAuth, async (req, res) => {
+  try {
+    const { groupId } = req.body;
+    const currentUsername = (req as any).user.username;
+
+    if (!groupId) return res.status(400).json({ error: 'Invite link required' });
+
+    let decodedGroupId;
+    try {
+      const decoded = jwt.verify(groupId, process.env.JWT_SECRET || 'secret') as any;
+      decodedGroupId = decoded.groupId;
+    } catch (err) {
+      return res.status(400).json({ error: 'Invite link expired or invalid' });
+    }
+
+    const group = await Group.findById(decodedGroupId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+
+    if (!group.members.includes(currentUsername)) {
+      await Group.findByIdAndUpdate(groupId, { $addToSet: { members: currentUsername } });
+    }
+
+    res.json({ message: 'Joined group', group: { id: group._id, name: group.name, creator: group.creator } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to join group' });
+  }
+});
+
+router.post('/leave-group', requireAuth, async (req, res) => {
+  try {
+    const { groupId } = req.body;
+    const currentUsername = (req as any).user.username;
+
+    if (!groupId) return res.status(400).json({ error: 'Group ID required' });
+
+    await Group.findByIdAndUpdate(groupId, { $pull: { members: currentUsername } });
+    res.json({ message: 'Left group' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to leave group' });
+  }
+});
+
+router.delete('/delete-group/:id', requireAuth, async (req, res) => {
+  try {
+    const groupId = req.params.id;
+    const currentUsername = (req as any).user.username;
+
+    const group = await Group.findById(groupId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+
+    if (group.creator !== currentUsername) {
+      return res.status(403).json({ error: 'Only the creator can delete the group' });
+    }
+
+    await Group.findByIdAndDelete(groupId);
+    res.json({ message: 'Group deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete group' });
   }
 });
 

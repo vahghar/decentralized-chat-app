@@ -4,10 +4,13 @@ export class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
   private roomId: string;
-  private onMessageCallback: (msg: string) => void;
+  private onMessageCallback: (msg: any) => void;
   private onStatusChange: (connected: boolean) => void;
+  
+  // File receiving state
+  private receivingFile: { id: string, name: string, size: number, chunks: ArrayBuffer[], received: number } | null = null;
 
-  constructor(roomId: string, onMessage: (msg: string) => void, onStatusChange: (connected: boolean) => void) {
+  constructor(roomId: string, onMessage: (msg: any) => void, onStatusChange: (connected: boolean) => void) {
     this.roomId = roomId;
     this.onMessageCallback = onMessage;
     this.onStatusChange = onStatusChange;
@@ -83,7 +86,7 @@ export class WebRTCManager {
 
   public async createOffer() {
     if (!this.peerConnection) return;
-    this.dataChannel = this.peerConnection.createDataChannel('chat');
+    this.dataChannel = this.peerConnection.createDataChannel('chat', { negotiated: false });
     this.setupDataChannel();
 
     const offer = await this.peerConnection.createOffer();
@@ -93,11 +96,52 @@ export class WebRTCManager {
 
   private setupDataChannel() {
     if (!this.dataChannel) return;
+    this.dataChannel.binaryType = 'arraybuffer';
     this.dataChannel.onopen = () => this.onStatusChange(true);
     this.dataChannel.onclose = () => this.onStatusChange(false);
-    this.dataChannel.onmessage = (event) => {
-      this.onMessageCallback(event.data);
-    };
+    this.dataChannel.onmessage = (event) => this.handleIncomingData(event.data);
+  }
+
+  private handleIncomingData(data: string | ArrayBuffer) {
+    if (typeof data === 'string') {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.type === 'file_start') {
+          this.receivingFile = {
+            id: parsed.id,
+            name: parsed.name,
+            size: parsed.size,
+            chunks: [],
+            received: 0
+          };
+          this.onMessageCallback(JSON.stringify({ type: 'sys', text: `Receiving file: ${parsed.name}...` }));
+        } else if (parsed.type === 'file_end') {
+          if (this.receivingFile) {
+            const blob = new Blob(this.receivingFile.chunks);
+            const url = URL.createObjectURL(blob);
+            this.onMessageCallback(JSON.stringify({ 
+              type: 'file_received', 
+              url, 
+              name: this.receivingFile.name, 
+              size: this.receivingFile.size 
+            }));
+            this.receivingFile = null;
+          }
+        } else {
+          // Regular text message
+          this.onMessageCallback(data);
+        }
+      } catch (e) {
+        // Plain string fallback
+        this.onMessageCallback(data);
+      }
+    } else if (data instanceof ArrayBuffer) {
+      if (this.receivingFile) {
+        this.receivingFile.chunks.push(data);
+        this.receivingFile.received += data.byteLength;
+        // Could emit progress events here
+      }
+    }
   }
 
   public sendMessage(message: string): boolean {
@@ -106,6 +150,54 @@ export class WebRTCManager {
       return true;
     }
     return false;
+  }
+
+  public async sendFile(file: File, senderName: string): Promise<boolean> {
+    if (!this.dataChannel || this.dataChannel.readyState !== 'open') return false;
+
+    const fileId = Math.random().toString(36).substring(7);
+    
+    // Announce file start
+    this.dataChannel.send(JSON.stringify({
+      type: 'file_start',
+      id: fileId,
+      name: file.name,
+      size: file.size,
+      sender: senderName
+    }));
+
+    const chunkSize = 16384; // 16KB
+    const reader = file.stream().getReader();
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      let offset = 0;
+      while (offset < value.length) {
+        const end = Math.min(offset + chunkSize, value.length);
+        const chunk = value.slice(offset, end);
+        
+        // Wait if buffer is full
+        while (this.dataChannel && this.dataChannel.bufferedAmount > 65535) {
+          await new Promise(r => setTimeout(r, 10));
+        }
+        
+        if (this.dataChannel?.readyState === 'open') {
+          this.dataChannel.send(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
+        } else {
+          return false;
+        }
+        offset += chunkSize;
+      }
+    }
+
+    // Announce file end
+    this.dataChannel.send(JSON.stringify({
+      type: 'file_end',
+      id: fileId
+    }));
+    return true;
   }
 
   public close() {
