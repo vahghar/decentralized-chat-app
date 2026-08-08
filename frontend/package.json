@@ -23,7 +23,10 @@
     "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.0",
     "tailwind-merge": "^2.5.2",
-    "zustand": "^4.5.5"
+    "zustand": "^4.5.5",
+    "bs58": "^6.0.0",
+    "@types/bs58": "^4.0.4",
+    "dexie": "^4.0.8"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
