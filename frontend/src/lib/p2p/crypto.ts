@@ -53,7 +53,7 @@ export async function verifySignature(
 
     const publicKey = await window.crypto.subtle.importKey(
       "raw",
-      publicKeyRaw,
+      publicKeyRaw as any,
       {
         name: "ECDSA",
         namedCurve: "P-256",
@@ -69,7 +69,7 @@ export async function verifySignature(
         hash: { name: "SHA-256" },
       },
       publicKey,
-      signature,
+      signature as any,
       encoder.encode(data)
     );
   } catch (error) {

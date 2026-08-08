@@ -33,7 +33,6 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
   // Hold current coords for interval use
   const coordsRef = useRef<{ lat: number; lng: number } | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Fetch contacts on mount ──────────────────────────────────────
   useEffect(() => {
@@ -97,11 +96,13 @@ const Sidebar: React.FC<{ onClose?: () => void }> = ({ onClose }) => {
         });
         
         signalSocket.on('peer_joined', (data: { peerId: string }) => {
-           setNearbyUsers(prev => Array.from(new Set([...prev, data.peerId])));
+           const current = useChatStore.getState().nearbyUsers;
+           setNearbyUsers(Array.from(new Set([...current, data.peerId])));
         });
 
         signalSocket.on('peer_left', (data: { peerId: string }) => {
-           setNearbyUsers(prev => prev.filter(p => p !== data.peerId));
+           const current = useChatStore.getState().nearbyUsers;
+           setNearbyUsers(current.filter(p => p !== data.peerId));
         });
 
         // Heartbeat to keep GEO index fresh

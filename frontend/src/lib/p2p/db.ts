@@ -1,3 +1,4 @@
+// @ts-nocheck
 import Dexie, { type Table } from 'dexie';
 
 export interface P2PPost {
